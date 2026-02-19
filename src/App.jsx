@@ -226,6 +226,23 @@ function App() {
 
   const [generatedImage, setGeneratedImage] = useState(null); // { dataUrl, mimeType }
   const [genError, setGenError] = useState(null);
+  const [gallery, setGallery] = useState([]); // 사진첩: [{ id, dataUrl, book, mood, style, scene, props, date }]
+
+  const saveToGallery = () => {
+    if (!generatedImage?.dataUrl) return false;
+    const entry = {
+      id: Date.now(),
+      dataUrl: generatedImage.dataUrl,
+      book: { title: selectedBook?.title, cover: selectedBook?.cover },
+      mood: selectedMood?.label,
+      style: selectedStyle?.label,
+      scene: selectedScene?.label,
+      props: selectedProps?.map((p) => p.label),
+      date: new Date().toLocaleDateString("ko-KR"),
+    };
+    setGallery((prev) => [entry, ...prev]);
+    return true;
+  };
 
   const startGen = async () => {
     // 프롬프트 빌드
@@ -396,6 +413,8 @@ function App() {
             scene={selectedScene} props={selectedProps} prompt={generatedPrompt}
             image={generatedImage} error={genError}
             channel={path}
+            gallery={gallery}
+            onSave={saveToGallery}
             onRetry={async () => {
               setStep("loading");
               setGeneratedImage(null);
@@ -651,15 +670,22 @@ function PageLoading({ book, mood }) {
 }
 
 // ─── 결과 ───
-function PageResult({ book, mood, style, scene, props, prompt, image, error, channel, onRetry, onReset }) {
+function PageResult({ book, mood, style, scene, props, prompt, image, error, channel, gallery, onSave, onRetry, onReset }) {
   const allLabels = [mood?.label, style?.label, scene?.label, ...(props?.map((p) => p.label) || [])].filter(Boolean);
   const hash = allLabels.join("").split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const h1 = hash % 360, h2 = (h1 + 80) % 360;
 
   const [showPrompt, setShowPrompt] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
-  return (
-    <div className="page-full result-page">
+  const handleSave = () => {
+    if (onSave()) setSaved(true);
+  };
+
+  // ─── 공통: 이미지 + 태그 영역 ───
+  const ImageArea = () => (
+    <>
       <h3 className="result-title">나의 북무드 이미지 ✨</h3>
 
       {error && (
@@ -683,39 +709,15 @@ function PageResult({ book, mood, style, scene, props, prompt, image, error, cha
       )}
 
       <div className="result-summary-tags">
-        {allLabels.map((t, i) => <span key={i} className="result-tag">{t}</span>)}
+        <span className="result-tag tag-kyobo">#교보문고</span>
+        {allLabels.map((t, i) => <span key={i} className="result-tag">#{t}</span>)}
       </div>
+    </>
+  );
 
-      <div className="result-actions">
-        <button className="btn-primary" style={{ flex: 1 }} onClick={() => {
-          if (image?.dataUrl) {
-            const a = document.createElement("a");
-            a.href = image.dataUrl;
-            a.download = `bookmood-${book?.title || "image"}.png`;
-            a.click();
-          } else { alert("이미지가 생성되지 않았습니다 (시뮬레이션 모드)"); }
-        }}>💾 저장</button>
-        <button className="btn-kakao" style={{ flex: 1 }}>💬 카톡 공유</button>
-      </div>
-
-      <div className="feedback-row">
-        <span className="feedback-label">이 이미지가 내 감정과 잘 맞나요?</span>
-        <button className="feedback-btn" onClick={() => alert("👍 피드백 저장됨")}>👍</button>
-        <button className="feedback-btn" onClick={() => alert("👎 피드백 저장됨")}>👎</button>
-      </div>
-
-      {channel === "web" && (
-        <div className="recommend-section">
-          <p className="recommend-title">📚 비슷한 분위기의 책</p>
-          <p className="recommend-placeholder">감성 데이터 축적 후 추천이 활성화됩니다 (2차 고도화)</p>
-        </div>
-      )}
-
-      <div className="result-actions">
-        <button className="btn-outline" onClick={onRetry} style={{ flex: 1 }}>🔄 다시 생성</button>
-        <button className="btn-outline" onClick={onReset} style={{ flex: 1 }}>🏠 처음으로</button>
-      </div>
-
+  // ─── 공통: 프롬프트 디버그 ───
+  const PromptDebug = () => (
+    <>
       <button className="prompt-toggle" onClick={() => setShowPrompt(!showPrompt)}>
         {showPrompt ? "프롬프트 숨기기" : "🔧 생성된 프롬프트 보기 (개발용)"}
       </button>
@@ -727,6 +729,152 @@ function PageResult({ book, mood, style, scene, props, prompt, image, error, cha
           <pre className="prompt-debug-text">{JSON.stringify(prompt.meta, null, 2)}</pre>
         </div>
       )}
+    </>
+  );
+
+  // ─── 사진첩 갤러리 (웹 우측/하단) ───
+  const GallerySection = () => (
+    <div className="gallery-section">
+      <div className="gallery-header">
+        <h4 className="gallery-title">📷 내 사진첩</h4>
+        <span className="gallery-count">{gallery.length}장</span>
+      </div>
+      {gallery.length === 0 ? (
+        <div className="gallery-empty">
+          <p>아직 저장된 이미지가 없어요</p>
+          <p className="gallery-empty-hint">[사진첩에 저장]을 눌러 첫 이미지를 저장해보세요</p>
+        </div>
+      ) : (
+        <div className="gallery-grid">
+          {gallery.map((item) => (
+            <div key={item.id} className="gallery-item">
+              <img src={item.dataUrl} alt={item.book?.title} className="gallery-thumb" />
+              <div className="gallery-item-info">
+                <span className="gallery-item-title">{item.book?.title}</span>
+                <span className="gallery-item-mood">{item.mood}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // ═══════════════════════════════════════
+  // 키오스크 결과 화면
+  // ═══════════════════════════════════════
+  if (channel === "kiosk") {
+    return (
+      <div className="page-full result-page">
+        <div className="result-image-section">
+          <ImageArea />
+
+          {/* 사진첩 미리보기 — 방금 생성한 이미지를 첫 칸에 표시 */}
+          <div className="kiosk-gallery-preview">
+            <div className="gallery-preview-grid">
+              <div className="gallery-preview-slot filled">
+                {image?.dataUrl ? (
+                  <img src={image.dataUrl} alt="" className="gallery-preview-img" />
+                ) : (
+                  <span style={{ fontSize: 24 }}>{book?.cover}</span>
+                )}
+              </div>
+              <div className="gallery-preview-slot empty">
+                <span className="gallery-preview-plus">+</span>
+              </div>
+              <div className="gallery-preview-slot empty">
+                <span className="gallery-preview-plus">+</span>
+              </div>
+            </div>
+            <p className="kiosk-gallery-hint">회원가입하면 나만의 사진첩에 저장됩니다</p>
+            <p className="kiosk-gallery-sub">지금 만든 이미지가 사라지기 전에 저장하세요</p>
+          </div>
+
+          {/* 메인 CTA: 회원가입 유도 */}
+          <div className="result-actions">
+            <button className="btn-signup" style={{ flex: 1 }} onClick={() => setShowQR(true)}>
+              🎁 나만의 사진첩 만들기 (회원가입)
+            </button>
+          </div>
+
+          {/* QR 코드 모달 */}
+          {showQR && (
+            <div className="modal-overlay" onClick={() => setShowQR(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <button className="modal-close" onClick={() => setShowQR(false)}>✕</button>
+                <h3 className="modal-title">📷 나만의 사진첩 만들기</h3>
+                <div className="modal-qr-wrap">
+                  <img src="/kyobobook_join_qr.png" alt="회원가입 QR 코드" className="modal-qr-img" />
+                </div>
+                <p className="modal-desc">스마트폰으로 QR을 스캔하면<br />회원가입 페이지로 이동합니다</p>
+                <p className="modal-sub">가입 완료 시 방금 만든<br />북무드 이미지가 자동 저장됩니다</p>
+                <button className="btn-outline modal-close-btn" onClick={() => setShowQR(false)}>닫기</button>
+              </div>
+            </div>
+          )}
+
+          {/* 1-tap 피드백 */}
+          <div className="feedback-row">
+            <span className="feedback-label">이 이미지가 내 감정과 잘 맞나요?</span>
+            <button className="feedback-btn" onClick={() => alert("👍 피드백 저장됨")}>👍</button>
+            <button className="feedback-btn" onClick={() => alert("👎 피드백 저장됨")}>👎</button>
+          </div>
+
+          <div className="result-actions">
+            <button className="btn-outline" onClick={onRetry} style={{ flex: 1 }}>🔄 다시 생성</button>
+            <button className="btn-outline" onClick={onReset} style={{ flex: 1 }}>🏠 처음으로</button>
+          </div>
+
+          <PromptDebug />
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════
+  // 웹 결과 화면 (2분할)
+  // ═══════════════════════════════════════
+  return (
+    <div className="result-split-layout">
+      <div className="result-split-left">
+        <div className="result-image-section">
+          <ImageArea />
+
+          {/* 웹: 사진첩 저장 버튼만 */}
+          <div className="result-actions">
+            {saved ? (
+              <button className="btn-saved" style={{ flex: 1 }} disabled>✅ 사진첩에 저장됨</button>
+            ) : (
+              <button className="btn-primary" style={{ flex: 1 }} onClick={handleSave} disabled={!image?.dataUrl}>
+                📸 사진첩에 저장
+              </button>
+            )}
+          </div>
+
+          {/* 1-tap 피드백 */}
+          <div className="feedback-row">
+            <span className="feedback-label">이 이미지가 내 감정과 잘 맞나요?</span>
+            <button className="feedback-btn" onClick={() => alert("👍 피드백 저장됨")}>👍</button>
+            <button className="feedback-btn" onClick={() => alert("👎 피드백 저장됨")}>👎</button>
+          </div>
+
+          {/* 추천 도서 placeholder */}
+          <div className="recommend-section">
+            <p className="recommend-title">📚 비슷한 분위기의 책</p>
+            <p className="recommend-placeholder">감성 데이터 축적 후 추천이 활성화됩니다 (2차 고도화)</p>
+          </div>
+
+          <div className="result-actions">
+            <button className="btn-outline" onClick={onRetry} style={{ flex: 1 }}>🔄 다시 생성</button>
+            <button className="btn-outline" onClick={onReset} style={{ flex: 1 }}>🏠 처음으로</button>
+          </div>
+
+          <PromptDebug />
+        </div>
+      </div>
+      <div className="result-split-right">
+        <GallerySection />
+      </div>
     </div>
   );
 }
