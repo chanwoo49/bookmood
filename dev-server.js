@@ -13,16 +13,21 @@ import cors from "cors";
 
 // Vercel 서버리스 함수 import
 import generateHandler from "./api/generate.js";
+import storyGenerateHandler from "./api/story-generate.js";
 
 const app = express();
 const PORT = 3001;
 
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" })); // 사진 업로드를 위해 20mb로 증가
 
 // Vercel 함수를 Express 핸들러로 연결
 app.post("/api/generate", (req, res) => {
   generateHandler(req, res);
+});
+
+app.post("/api/story-generate", (req, res) => {
+  storyGenerateHandler(req, res);
 });
 
 // 헬스체크

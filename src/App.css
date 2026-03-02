@@ -260,6 +260,32 @@ body { font-family: "Noto Sans KR", -apple-system, sans-serif; background: #2c25
 .btn-signup:hover { transform: scale(0.98); }
 .btn-signup:active { transform: scale(0.96); }
 
+/* ═══════════════════════ 스토리 모드 버튼 ═══════════════════════ */
+.btn-story { padding: 13px 28px; border-radius: 10px; border: 2px solid #7c5cbf; background: linear-gradient(135deg, #f3eeff, #e8dfff); color: #5b3a9e; font-size: 14px; font-weight: 700; cursor: pointer; font-family: "Noto Sans KR", sans-serif; transition: all 0.15s; }
+.btn-story:hover { background: linear-gradient(135deg, #e8dfff, #d5c8ff); transform: scale(0.98); }
+
+/* ═══════════════════════ 스토리: 사진 업로드 ═══════════════════════ */
+.story-upload-area { margin: 12px 20px; border: 2px dashed #d4cfc8; border-radius: 16px; min-height: 220px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; cursor: pointer; position: relative; overflow: hidden; }
+.story-upload-placeholder { text-align: center; padding: 24px; position: relative; }
+.story-upload-text { font-size: 14px; color: #2c2520; margin: 8px 0; line-height: 1.5; }
+.story-upload-hint { font-size: 11px; color: #8a7e72; line-height: 1.4; }
+.story-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.story-photo-preview { width: 100%; text-align: center; padding: 12px; }
+.story-photo-img { max-width: 100%; max-height: 240px; border-radius: 12px; object-fit: contain; }
+.story-photo-remove { margin-top: 8px; padding: 6px 16px; border: 1px solid #e0a090; background: #fef3f0; color: #c06030; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.story-notice { margin: 8px 20px; padding: 10px 14px; background: #f5f0ea; border-radius: 8px; }
+.story-notice p { font-size: 11px; color: #8a7e72; line-height: 1.4; }
+
+/* ═══════════════════════ 스토리: 폼 입력 ═══════════════════════ */
+.story-form { padding: 0 20px; }
+.story-label { display: block; font-size: 13px; font-weight: 600; color: #2c2520; margin-bottom: 6px; }
+.story-input { width: 100%; padding: 12px 14px; border: 1.5px solid #d4cfc8; border-radius: 10px; font-size: 14px; font-family: "Noto Sans KR", sans-serif; color: #2c2520; background: #fff; box-sizing: border-box; }
+.story-input:focus { outline: none; border-color: #c06030; }
+.story-textarea { width: 100%; padding: 12px 14px; border: 1.5px solid #d4cfc8; border-radius: 10px; font-size: 14px; font-family: "Noto Sans KR", sans-serif; color: #2c2520; background: #fff; resize: none; box-sizing: border-box; line-height: 1.5; }
+.story-textarea:focus { outline: none; border-color: #c06030; }
+.story-category-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.story-form-hint { text-align: center; font-size: 11px; color: #8a7e72; margin: 8px 20px; }
+
 /* ═══════════════════════ QR 모달 ═══════════════════════ */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; animation: fadeIn 0.2s ease; }
 .modal-content { background: #fff; border-radius: 20px; padding: 32px 28px; max-width: 340px; width: 90%; text-align: center; position: relative; box-shadow: 0 16px 48px rgba(0,0,0,0.25); animation: modalPop 0.25s ease; }

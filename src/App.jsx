@@ -47,6 +47,16 @@ const STYLES = [
   { label: "필름 감성",      icon: "📷", prompt_en: "film photography style, analog grain, muted tones" },
 ];
 
+// ─── 스토리 모드 전용: 만화 스타일 ───
+const STORY_STYLES = [
+  { label: "따뜻한 만화",   icon: "🌞", prompt_en: "warm slice-of-life comic style, soft pastel colors, gentle rounded lines, cozy atmosphere" },
+  { label: "코믹 팝",       icon: "💥", prompt_en: "colorful pop comic style, bold outlines, vibrant colors, dynamic expressions, speech bubble friendly" },
+  { label: "느와르",         icon: "🌙", prompt_en: "noir comic style, high contrast black and white with dramatic shadows, moody cinematic lighting" },
+  { label: "수채화 만화",   icon: "🎨", prompt_en: "watercolor comic style, soft bleeding colors, hand-painted panels, dreamy artistic atmosphere" },
+  { label: "감성 웹툰",     icon: "📱", prompt_en: "Korean webtoon style, clean digital art, soft gradients, emotional character expressions, modern aesthetic" },
+  { label: "레트로 만화",   icon: "📰", prompt_en: "retro vintage comic strip style, halftone dots, classic panel layout, nostalgic color palette" },
+];
+
 // ─── 공통: 장면 ───
 const SCENES = [
   { label: "서점",       prompt_en: "bookstore interior" },
@@ -187,6 +197,7 @@ function buildPrompt({ book, mood, style, scene, props, channel }) {
 // ═══════════════════════════════════════════════════════════════
 const STEPS_KIOSK = ["도서선택", "확인", "기분", "스타일", "장면", "소품", "생성", "결과"];
 const STEPS_WEB = ["도서목록", "기분", "한줄감상", "스타일", "장면", "소품", "생성", "결과"];
+const STEPS_STORY = ["사진업로드", "도서정보", "스토리", "스타일", "생성", "결과"];
 
 // ═══════════════════════════════════════════════════════════════
 // 5. 메인 App
@@ -205,6 +216,13 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(null);
   const [generatedPrompt, setGeneratedPrompt] = useState(null); // 프롬프트 결과
 
+  // ─── 스토리 모드 전용 state ───
+  const [storyPhoto, setStoryPhoto] = useState(null);        // { dataUrl, mimeType, base64 }
+  const [storyBookTitle, setStoryBookTitle] = useState("");
+  const [storyBookCategory, setStoryBookCategory] = useState("");
+  const [storyPreRead, setStoryPreRead] = useState("");       // 읽기 전 묘사
+  const [storyPostRead, setStoryPostRead] = useState("");     // 읽기 후 묘사
+
   const nav = (s) => { setHistory((p) => [...p, step]); setStep(s); };
   const back = () => { if (history.length) { setStep(history.at(-1)); setHistory((h) => h.slice(0, -1)); } };
   const reset = () => {
@@ -213,6 +231,8 @@ function App() {
     setSelectedScene(null); setSelectedProps([]); setSentimentText("");
     setSearchQuery(""); setMenuOpen(null); setGeneratedPrompt(null);
     setGeneratedImage(null); setGenError(null);
+    setStoryPhoto(null); setStoryBookTitle(""); setStoryBookCategory("");
+    setStoryPreRead(""); setStoryPostRead("");
   };
 
   const toggleProp = (p) => {
@@ -288,10 +308,73 @@ function App() {
     setStep("result");
   };
 
+  // ─── 스토리 모드 생성 ───
+  const startStoryGen = async () => {
+    const storyPrompt = `Create a 4-panel comic strip in ${selectedStyle?.prompt_en || "warm illustration style"}.
+
+Story: A person's journey with the book "${storyBookTitle}"${storyBookCategory ? ` (${storyBookCategory})` : ""}.
+Before reading: ${storyPreRead}.
+After reading: ${storyPostRead}.
+
+Show the emotional transformation from before to after reading the book across 4 panels. Let the narrative flow naturally — you decide what happens in each panel.
+
+Character style: ${storyPhoto ? "Use the uploaded photo as a loose reference for the character. Keep recognizable features like hairstyle, clothing, and general appearance, but render the face in a soft, slightly stylized way that matches the comic art style. The character should be identifiable but not photorealistic." : "Create a simple, relatable character with soft, gentle facial features that match the comic style."}
+Keep the character visually consistent across all panels. Safe for all audiences.`;
+
+    const promptResult = {
+      prompt: storyPrompt,
+      meta: {
+        channel: "story",
+        book_title: storyBookTitle,
+        book_category: storyBookCategory,
+        style_label: selectedStyle?.label,
+        has_photo: !!storyPhoto,
+      },
+    };
+
+    setGeneratedPrompt(promptResult);
+    setGeneratedImage(null);
+    setGenError(null);
+    console.log("=== 스토리 프롬프트 ===", storyPrompt);
+
+    nav("loading");
+
+    try {
+      const response = await fetch("/api/story-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: storyPrompt,
+          photo: storyPhoto?.base64 || null,
+          photoMimeType: storyPhoto?.mimeType || null,
+          meta: promptResult.meta,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.image) {
+        setGeneratedImage(data.image);
+        console.log("=== 스토리 이미지 생성 성공 ===");
+      } else {
+        console.warn("=== 스토리 이미지 생성 실패 ===", data);
+        setGenError(data.message || "스토리 이미지 생성에 실패했습니다.");
+      }
+    } catch (err) {
+      console.warn("=== API 호출 실패 ===", err.message);
+      setGenError(null);
+    }
+
+    setHistory((p) => [...p, "loading"]);
+    setStep("result");
+  };
+
   // 플로우 인디케이터 매핑
-  const stepLabels = path === "kiosk" ? STEPS_KIOSK : STEPS_WEB;
+  const stepLabels = path === "kiosk" ? STEPS_KIOSK : path === "story" ? STEPS_STORY : STEPS_WEB;
   const stepMap = path === "kiosk"
     ? { search: 0, confirm: 1, mood: 2, style: 3, scene: 4, props: 5, loading: 6, result: 7 }
+    : path === "story"
+    ? { storyUpload: 0, storyInfo: 1, storyText: 2, storyStyle: 3, loading: 4, result: 5 }
     : { booklist: 0, mood: 1, textinput: 2, style: 3, scene: 4, props: 5, loading: 6, result: 7 };
   const currentIdx = stepMap[step] ?? -1;
 
@@ -299,7 +382,7 @@ function App() {
   const renderPage = () => {
     switch (step) {
       case "home":
-        return <PageHome onKiosk={() => { setPath("kiosk"); nav("search"); }} onWeb={() => { setPath("web"); nav("booklist"); }} />;
+        return <PageHome onKiosk={() => { setPath("kiosk"); nav("search"); }} onWeb={() => { setPath("web"); nav("booklist"); }} onStory={() => { setPath("story"); nav("storyUpload"); }} />;
 
       // 키오스크
       case "search":
@@ -404,7 +487,57 @@ function App() {
         );
 
       case "loading":
-        return <PageLoading book={selectedBook} mood={selectedMood} />;
+        return <PageLoading book={selectedBook || { title: storyBookTitle, cover: "📖" }} mood={selectedMood || { label: "스토리 생성" }} />;
+
+      // ─── 스토리 모드 전용 페이지들 ───
+      case "storyUpload":
+        return (
+          <PageStoryUpload
+            photo={storyPhoto}
+            onUpload={setStoryPhoto}
+            onBack={back}
+            onNext={() => nav("storyInfo")}
+          />
+        );
+
+      case "storyInfo":
+        return (
+          <PageStoryInfo
+            bookTitle={storyBookTitle} setBookTitle={setStoryBookTitle}
+            bookCategory={storyBookCategory} setBookCategory={setStoryBookCategory}
+            onBack={back}
+            onNext={() => nav("storyText")}
+          />
+        );
+
+      case "storyText":
+        return (
+          <PageStoryText
+            preRead={storyPreRead} setPreRead={setStoryPreRead}
+            postRead={storyPostRead} setPostRead={setStoryPostRead}
+            onBack={back}
+            onNext={() => nav("storyStyle")}
+          />
+        );
+
+      case "storyStyle":
+        return (
+          <PageChipSelect
+            stepNum="4/4"
+            title="만화 스타일"
+            subtitle="4컷 만화의 스타일을 선택하세요"
+            book={{ title: storyBookTitle, cover: "📖" }}
+            items={STORY_STYLES}
+            selected={selectedStyle}
+            onSelect={setSelectedStyle}
+            displayFn={(item) => `${item.icon} ${item.label}`}
+            keyFn={(item) => item.label}
+            isSelected={(item, sel) => sel?.label === item.label}
+            onBack={back}
+            onNext={startStoryGen}
+            nextLabel="스토리 만화 생성 ✨"
+          />
+        );
 
       case "result":
         return (
@@ -436,7 +569,7 @@ function App() {
         );
 
       default:
-        return <PageHome onKiosk={() => { setPath("kiosk"); nav("search"); }} onWeb={() => { setPath("web"); nav("booklist"); }} />;
+        return <PageHome onKiosk={() => { setPath("kiosk"); nav("search"); }} onWeb={() => { setPath("web"); nav("booklist"); }} onStory={() => { setPath("story"); nav("storyUpload"); }} />;
     }
   };
 
@@ -470,11 +603,11 @@ function App() {
   }
 
   // 웹 래퍼
-  if (path === "web") {
+  if (path === "web" || path === "story") {
     return (
       <div className="web-page">
         <div className="web-container">
-          <div className="web-top-bar"><span className="web-logo">📖 BookMood</span><button className="web-home-btn" onClick={reset}>홈으로</button></div>
+          <div className="web-top-bar"><span className="web-logo">{path === "story" ? "📖 BookMood Story" : "📖 BookMood"}</span><button className="web-home-btn" onClick={reset}>홈으로</button></div>
           <FlowIndicator />
           <div className="web-content">{renderPage()}</div>
         </div>
@@ -489,7 +622,7 @@ function App() {
 // 6. 페이지 컴포넌트들
 // ═══════════════════════════════════════════════════════════════
 
-function PageHome({ onKiosk, onWeb }) {
+function PageHome({ onKiosk, onWeb, onStory }) {
   return (
     <div className="page-center home-page">
       <div style={{ fontSize: 48 }}>📖</div>
@@ -498,6 +631,7 @@ function PageHome({ onKiosk, onWeb }) {
       <div className="home-buttons">
         <button className="btn-primary btn-large" onClick={onKiosk}>🖥 키오스크로 시작</button>
         <button className="btn-outline btn-large" onClick={onWeb}>🌐 웹사이트로 시작</button>
+        <button className="btn-story btn-large" onClick={onStory}>📖 나의 독서 스토리</button>
       </div>
       <p className="home-sub">소요시간 약 30초 · 무료 체험</p>
     </div>
@@ -874,6 +1008,158 @@ function PageResult({ book, mood, style, scene, props, prompt, image, error, cha
       </div>
       <div className="result-split-right">
         <GallerySection />
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 스토리 모드 전용 컴포넌트
+// ═══════════════════════════════════════════════════════════════
+
+// ─── 사진 업로드 (드래그 & 드롭) ───
+function PageStoryUpload({ photo, onUpload, onBack, onNext }) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const processFile = (file) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    // 이미지를 리사이즈 (긴 변 1024px)
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.onload = () => {
+        const MAX = 1024;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const base64 = dataUrl.split(",")[1];
+        onUpload({ dataUrl, base64, mimeType: "image/jpeg" });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    processFile(file);
+  };
+
+  const handleFileInput = (e) => {
+    const file = e.target.files?.[0];
+    processFile(file);
+  };
+
+  return (
+    <div className="page-full">
+      <div className="page-header">
+        <button className="btn-back" onClick={onBack}>‹</button>
+        <div><div className="header-title">사진 업로드</div><div className="header-sub">나의 사진을 올려주세요 (선택)</div></div>
+      </div>
+
+      <div className="story-upload-area"
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        style={{ borderColor: isDragging ? "#c06030" : undefined, background: isDragging ? "#fef3f0" : undefined }}
+      >
+        {photo ? (
+          <div className="story-photo-preview">
+            <img src={photo.dataUrl} alt="업로드된 사진" className="story-photo-img" />
+            <button className="story-photo-remove" onClick={() => onUpload(null)}>✕ 삭제</button>
+          </div>
+        ) : (
+          <div className="story-upload-placeholder">
+            <span style={{ fontSize: 40 }}>📷</span>
+            <p className="story-upload-text">여기에 사진을 드래그하거나<br />클릭해서 업로드하세요</p>
+            <p className="story-upload-hint">사진은 만화 속 캐릭터 참조용으로 사용됩니다<br />인물은 단순화되어 표현됩니다</p>
+            <input type="file" accept="image/*" onChange={handleFileInput} className="story-file-input" />
+          </div>
+        )}
+      </div>
+
+      <div className="story-notice">
+        <p>📌 사진은 서버에 저장되지 않으며, 이미지 생성 후 즉시 삭제됩니다.</p>
+      </div>
+
+      <div className="nav-bar">
+        <button className="btn-outline" onClick={onBack}>이전</button>
+        <button className="btn-primary" onClick={onNext}>
+          {photo ? "다음" : "사진 없이 진행"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── 도서 정보 입력 ───
+function PageStoryInfo({ bookTitle, setBookTitle, bookCategory, setBookCategory, onBack, onNext }) {
+  const categories = ["문학/소설", "경제/경영", "자기계발", "인문", "과학/IT", "에세이", "사회/정치", "예술", "기타"];
+  const canNext = bookTitle.trim().length > 0;
+
+  return (
+    <div className="page-full">
+      <div className="page-header">
+        <button className="btn-back" onClick={onBack}>‹</button>
+        <div><div className="header-title">도서 정보</div><div className="header-sub">어떤 책인지 알려주세요</div></div>
+      </div>
+
+      <div className="story-form">
+        <label className="story-label">도서명 *</label>
+        <input type="text" value={bookTitle} onChange={(e) => setBookTitle(e.target.value)} placeholder="예: 돈의 속성" className="story-input" maxLength={50} autoFocus />
+
+        <label className="story-label" style={{ marginTop: 16 }}>카테고리</label>
+        <div className="story-category-chips">
+          {categories.map((cat) => (
+            <button key={cat}
+              className={`chip ${bookCategory === cat ? "selected" : ""}`}
+              onClick={() => setBookCategory(bookCategory === cat ? "" : cat)}
+            >{cat}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="nav-bar">
+        <button className="btn-outline" onClick={onBack}>이전</button>
+        <button className="btn-primary" onClick={onNext} disabled={!canNext} style={{ opacity: canNext ? 1 : 0.4 }}>다음</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── 읽기 전/후 묘사 입력 ───
+function PageStoryText({ preRead, setPreRead, postRead, setPostRead, onBack, onNext }) {
+  const canNext = preRead.trim().length > 0 && postRead.trim().length > 0;
+
+  return (
+    <div className="page-full">
+      <div className="page-header">
+        <button className="btn-back" onClick={onBack}>‹</button>
+        <div><div className="header-title">나의 독서 스토리</div><div className="header-sub">읽기 전과 후의 변화를 알려주세요</div></div>
+      </div>
+
+      <div className="story-form">
+        <label className="story-label">📖 읽기 전에는... *</label>
+        <textarea value={preRead} onChange={(e) => setPreRead(e.target.value)} placeholder="예: 돈에 대해 막연한 불안감이 있었다" className="story-textarea" maxLength={200} rows={3} />
+        <span className="text-counter">{preRead.length}/200</span>
+
+        <label className="story-label" style={{ marginTop: 16 }}>✨ 읽은 후에는... *</label>
+        <textarea value={postRead} onChange={(e) => setPostRead(e.target.value)} placeholder="예: 돈을 대하는 태도가 달라지고 자신감이 생겼다" className="story-textarea" maxLength={200} rows={3} />
+        <span className="text-counter">{postRead.length}/200</span>
+      </div>
+
+      <p className="story-form-hint">작성하신 내용이 4컷 만화의 스토리가 됩니다</p>
+
+      <div className="nav-bar">
+        <button className="btn-outline" onClick={onBack}>이전</button>
+        <button className="btn-primary" onClick={onNext} disabled={!canNext} style={{ opacity: canNext ? 1 : 0.4 }}>다음</button>
       </div>
     </div>
   );
